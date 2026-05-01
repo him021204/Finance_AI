@@ -282,3 +282,153 @@ body {
 .footer-text span {
   color: var(--accent-green);
 }
+/* ── Paste these at the bottom of your existing index.css ── */
+
+/* System messages (upload confirmation, errors) */
+.system-message {
+  text-align: center;
+  font-size: 0.82rem;
+  color: #8b949e;
+  padding: 6px 16px;
+  margin: 4px auto;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 20px;
+  max-width: 80%;
+}
+
+.system-message.error {
+  color: #f85149;
+  background: rgba(248, 81, 73, 0.08);
+}
+
+/* Upload status badge in sidebar */
+.upload-status {
+  margin: 12px 16px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.upload-status.uploading {
+  background: rgba(210, 153, 34, 0.15);
+  color: #d2a520;
+}
+
+.upload-status.ready {
+  background: rgba(35, 134, 54, 0.15);
+  color: #3fb950;
+}
+
+.upload-status.error {
+  background: rgba(248, 81, 73, 0.12);
+  color: #f85149;
+}
+
+/* File pill above input */
+.file-pill {
+  position: absolute;
+  top: -28px;
+  left: 2rem;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-pill.uploading {
+  background: #d2a520;
+  color: #000;
+}
+
+/* Thinking animation */
+.thinking-dots span {
+  animation: blink 1.2s infinite;
+  opacity: 0;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes blink {
+
+  0%,
+  80%,
+  100% {
+    opacity: 0;
+  }
+
+  40% {
+    opacity: 1;
+  }
+}
+
+/* Source citations */
+.sources-section {
+  margin-top: 10px;
+}
+
+.sources-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #8b949e;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sources-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #c9d1d9;
+}
+
+.sources-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.source-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 2px solid #238636;
+  border-radius: 0 6px 6px 0;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  color: #8b949e;
+}
+
+.source-index {
+  background: #238636;
+  color: #fff;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.source-item p {
+  margin: 0;
+  line-height: 1.5;
+}
