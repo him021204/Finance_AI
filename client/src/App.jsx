@@ -1,60 +1,126 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import {
-  Bot,
-  Settings,
-  Database,
-  Cpu,
-  Zap,
-  TrendingUp,
-  PieChart,
-  BarChart3,
-  Lightbulb,
+  MessageSquare,
+  Plus,
   Send,
-  Paperclip,
+  Upload,
   FileText,
-  CheckCircle,
-  AlertCircle,
   ChevronDown,
   ChevronUp,
+  Loader,
+  X,
+  CheckCircle,
+  AlertCircle,
+  Sparkles,
+  ArrowUp,
 } from 'lucide-react';
 import './index.css';
 
-const API_BASE = 'https://9047-34-10-184-233.ngrok-free.app';
+const API_BASE = 'http://localhost:8000';
 
 function App() {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [attachedFile, setAttachedFile] = useState(null);
+  const [sessionId, setSessionId] = useState('knowledge_base');
 
-  // ── FIX 1: Store session_id returned by /upload ──────────────
-  const [sessionId, setSessionId] = useState(null);
-  const [uploadStatus, setUploadStatus] = useState(null); // 'uploading' | 'ready' | 'error'
-  const [uploadedFileName, setUploadedFileName] = useState(null);
+  // ── Upload state ───────────────────────────────────────────────
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // ── Chat history (persisted) ───────────────────────────────────
+  const [chatHistory, setChatHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('financeai_chat_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+
+  // ── Toast ──────────────────────────────────────────────────────
+  const [toast, setToast] = useState(null);
 
   const fileInputRef = useRef(null);
   const chatBottomRef = useRef(null);
+  const inputRef = useRef(null);
 
-  // Auto-scroll to latest message
+  // Persist chat history
+  useEffect(() => {
+    localStorage.setItem('financeai_chat_history', JSON.stringify(chatHistory));
+  }, [chatHistory]);
+
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  const handleSuggestionClick = (text) => setInputValue(text);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
-  // ── FIX 1: /upload — capture & store session_id ──────────────
-  const handleFileChange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const showToast = (type, message) => setToast({ type, message });
 
-    setAttachedFile(file);
-    setUploadStatus('uploading');
+  // ── Save current chat to history ───────────────────────────────
+  const saveCurrentChat = () => {
+    if (messages.length === 0) return;
+    const firstUserMsg = messages.find(m => m.sender === 'user');
+    const title = firstUserMsg
+      ? firstUserMsg.text.slice(0, 40) + (firstUserMsg.text.length > 40 ? '…' : '')
+      : 'New chat';
+    const chat = {
+      id: Date.now(),
+      title,
+      messages: [...messages],
+      uploadedFiles: [...uploadedFiles],
+      timestamp: new Date().toISOString(),
+    };
+    setChatHistory(prev => [chat, ...prev.slice(0, 49)]); // keep last 50
+  };
 
+  // ── New chat ───────────────────────────────────────────────────
+  const handleNewChat = () => {
+    saveCurrentChat();
+    setMessages([]);
+    setUploadedFiles([]);
+    inputRef.current?.focus();
+  };
+
+  // ── Load a past chat ───────────────────────────────────────────
+  const handleLoadChat = (chat) => {
+    saveCurrentChat();
+    setMessages(chat.messages);
+    setUploadedFiles(chat.uploadedFiles || []);
+  };
+
+  // ── Delete a past chat ─────────────────────────────────────────
+  const handleDeleteChat = (e, chatId) => {
+    e.stopPropagation();
+    setChatHistory(prev => prev.filter(c => c.id !== chatId));
+  };
+
+  // ── File upload ────────────────────────────────────────────────
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    const validFiles = files.filter(f => {
+      const name = f.name.toLowerCase();
+      return name.endsWith('.pdf') || name.endsWith('.zip');
+    });
+
+    if (!validFiles.length) {
+      showToast('error', 'Only PDF and ZIP files are supported.');
+      e.target.value = '';
+      return;
+    }
+
+    setIsUploading(true);
     const formData = new FormData();
-    formData.append('file', file);
+    validFiles.forEach(f => formData.append('files', f));
 
     try {
-      const res = await fetch(`${API_BASE}/upload`, {
+      const res = await fetch(`${API_BASE}/upload-multiple`, {
         method: 'POST',
         body: formData,
       });
@@ -65,36 +131,29 @@ function App() {
       }
 
       const data = await res.json();
-      // ✅ Save session_id for all subsequent /query calls
       setSessionId(data.session_id);
-      setUploadedFileName(file.name);
-      setUploadStatus('ready');
 
-      // Show a system message in chat
-      setMessages(prev => [...prev, {
-        sender: 'system',
-        text: `📄 "${file.name}" uploaded — ${data.num_chunks} chunks indexed. You can now ask questions about this report.`,
-      }]);
+      const newFiles = data.files_processed.map(name => ({ name }));
+      setUploadedFiles(prev => [...prev, ...newFiles]);
+
+      if (data.files_processed.length > 0) {
+        showToast('success', `${data.files_processed.length} file(s) uploaded successfully!`);
+      }
+      if (data.files_failed.length > 0) {
+        showToast('error', `${data.files_failed.length} file(s) failed to process.`);
+      }
     } catch (error) {
-      console.error('Upload error:', error);
-      setUploadStatus('error');
-      setAttachedFile(null);
-      setMessages(prev => [...prev, {
-        sender: 'system',
-        text: `❌ Upload failed: ${error.message}`,
-        isError: true,
-      }]);
+      showToast('error', `Upload failed: ${error.message}`);
+    } finally {
+      setIsUploading(false);
+      e.target.value = '';
     }
-
-    // Reset file input so the same file can be re-selected if needed
-    e.target.value = '';
   };
 
-  // In App.jsx, replace handleSendMessage with this:
-
+  // ── Send message ──────────────────────────────────────────────
   const handleSendMessage = async () => {
     const question = inputValue.trim();
-    if (!question) return;
+    if (!question || isLoading) return;
 
     const userMessage = { sender: 'user', text: question };
     const updatedMessages = [...messages, userMessage];
@@ -114,7 +173,7 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          session_id: sessionId || '',   // ✅ empty string if no doc uploaded — backend handles it
+          session_id: sessionId || '',
           question,
           history,
         }),
@@ -142,96 +201,129 @@ function App() {
     }
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
   return (
-    <div className="app-container">
-      {/* ── Sidebar ─────────────────────────────────────────── */}
+    <div className="app-root">
+      {/* ── Toast ─────────────────────────────────────────────── */}
+      {toast && (
+        <div className={`toast toast-${toast.type}`}>
+          {toast.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+          <span>{toast.message}</span>
+          <button className="toast-close" onClick={() => setToast(null)}><X size={14} /></button>
+        </div>
+      )}
+
+      {/* ── Sidebar ───────────────────────────────────────────── */}
       <aside className="sidebar">
-        <div className="sidebar-header">
-          <Bot size={24} />
-          <span>Finance AI</span>
-        </div>
+        <button className="new-chat-btn" onClick={handleNewChat}>
+          <Plus size={18} />
+          <span>New chat</span>
+        </button>
 
-        <div className="model-info-section">
-          <div className="model-info-header">
-            <Settings size={16} />
-            <span>Model Info</span>
-          </div>
+        {/* Upload button */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          style={{ display: 'none' }}
+          onChange={handleFileUpload}
+          accept=".pdf,.zip"
+          multiple
+        />
+        <button
+          className="upload-btn"
+          onClick={() => fileInputRef.current.click()}
+          disabled={isUploading}
+        >
+          {isUploading ? (
+            <><Loader size={16} className="spin" /> Processing…</>
+          ) : (
+            <><Upload size={16} /> Upload reports</>
+          )}
+        </button>
 
-          <div className="info-row">
-            <span className="info-label"><Cpu size={14} /> Model</span>
-            <span className="info-value">qwen-finance-7b</span>
-          </div>
-
-          <div className="info-row">
-            <span className="info-label"><Database size={14} /> Provider</span>
-            <span className="info-value">Hugging Face</span>
-          </div>
-
-          <div className="info-row">
-            <span className="info-label"><Zap size={14} /> Type</span>
-            <span className="info-value">Fine-tuned LLM</span>
-          </div>
-
-          <div className="model-desc">
-            Fine-tuned finance LLM for investment insights, market analysis, and financial advisory.
-          </div>
-        </div>
-
-        {/* ── Upload status badge ────────────────────────────── */}
-        {uploadStatus && (
-          <div className={`upload-status ${uploadStatus}`}>
-            {uploadStatus === 'uploading' && <span>⏳ Indexing PDF…</span>}
-            {uploadStatus === 'ready' && (
-              <>
-                <CheckCircle size={14} />
-                <span>{uploadedFileName}</span>
-              </>
-            )}
-            {uploadStatus === 'error' && (
-              <>
-                <AlertCircle size={14} />
-                <span>Upload failed</span>
-              </>
-            )}
+        {/* Uploaded files */}
+        {uploadedFiles.length > 0 && (
+          <div className="uploaded-section">
+            <span className="uploaded-label">Uploads</span>
+            {uploadedFiles.map((f, i) => (
+              <div key={i} className="uploaded-item">
+                <FileText size={13} />
+                <span title={f.name}>{f.name}</span>
+              </div>
+            ))}
           </div>
         )}
+
+        {/* Chat history */}
+        <div className="chat-history-section">
+          {chatHistory.length > 0 && (
+            <span className="history-label">Recent</span>
+          )}
+          {chatHistory.map(chat => (
+            <div
+              key={chat.id}
+              className="history-item"
+              onClick={() => handleLoadChat(chat)}
+            >
+              <MessageSquare size={14} />
+              <span className="history-title">{chat.title}</span>
+              <button
+                className="history-delete"
+                onClick={(e) => handleDeleteChat(e, chat.id)}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
       </aside>
 
-      {/* ── Main chat area ───────────────────────────────────── */}
-      <main className="main-area">
+      {/* ── Main ──────────────────────────────────────────────── */}
+      <main className="main">
         {messages.length === 0 ? (
-          <div className="hero-section">
-            <div className="hero-icon"><BarChart3 size={40} /></div>
-            <h1 className="hero-title">Finance AI Assistant</h1>
-            <p className="hero-subtitle">
-              Upload an Annual Report PDF, then ask anything about it.
-            </p>
-
-            <div className="suggestions-grid">
+          <div className="welcome">
+            <div className="welcome-icon">
+              <Sparkles size={36} />
+            </div>
+            <h1>What can I help with?</h1>
+            <div className="suggestions">
               {[
-                { icon: <TrendingUp size={16} />, text: "What was the revenue growth this year?" },
-                { icon: <PieChart size={16} />, text: "Summarise the key financial highlights." },
-                { icon: <BarChart3 size={16} />, text: "What are the major risk factors mentioned?" },
-                { icon: <Lightbulb size={16} />, text: "What is the company's debt-to-equity ratio?" },
-              ].map(({ icon, text }) => (
-                <div key={text} className="suggestion-card" onClick={() => handleSuggestionClick(text)}>
-                  <span className="suggestion-icon">{icon}</span>
-                  <span className="suggestion-text">{text}</span>
-                </div>
+                "What was the revenue growth this year?",
+                "Summarise the key financial highlights.",
+                "What are the major risk factors?",
+                "What is the debt-to-equity ratio?",
+              ].map(text => (
+                <button
+                  key={text}
+                  className="suggestion-chip"
+                  onClick={() => setInputValue(text)}
+                >
+                  {text}
+                </button>
               ))}
             </div>
           </div>
         ) : (
-          <div className="chat-history">
+          <div className="messages">
             {messages.map((msg, idx) => (
               <MessageBubble key={idx} msg={msg} />
             ))}
 
             {isLoading && (
-              <div className="chat-message bot">
-                <Bot size={20} style={{ minWidth: 20 }} />
-                <div className="thinking-dots">
-                  Thinking<span>.</span><span>.</span><span>.</span>
+              <div className="msg msg-bot">
+                <div className="msg-avatar bot-avatar">
+                  <Sparkles size={18} />
+                </div>
+                <div className="msg-content">
+                  <div className="typing-indicator">
+                    <span></span><span></span><span></span>
+                  </div>
                 </div>
               </div>
             )}
@@ -240,93 +332,76 @@ function App() {
           </div>
         )}
 
-        {/* ── Input bar ─────────────────────────────────────── */}
-        <div className="input-container">
-          {attachedFile && uploadStatus === 'uploading' && (
-            <div className="file-pill uploading">
-              <FileText size={14} /> Indexing {attachedFile.name}…
-            </div>
-          )}
-
-          <div className="input-wrapper">
-            <input
-              type="file"
-              ref={fileInputRef}
-              style={{ display: 'none' }}
-              onChange={handleFileChange}
-              accept=".pdf"
-            />
-            <label
-              className="file-upload-label"
-              title="Upload Annual Report PDF"
-              onClick={() => fileInputRef.current.click()}
-            >
-              <Paperclip size={20} />
-            </label>
-
-            <input
-              type="text"
+        {/* ── Input area ──────────────────────────────────────── */}
+        <div className="input-area">
+          <div className="input-box">
+            <textarea
+              ref={inputRef}
               className="chat-input"
-              placeholder={'Ask a finance question, or upload a report for specific analysis…'}
+              placeholder="Message Finance AI…"
               value={inputValue}
               onChange={e => setInputValue(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !isLoading && handleSendMessage()}
-              // disabled={isLoading}
-            />  
-
+              onKeyDown={handleKeyDown}
+              rows={1}
+              onInput={e => {
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+              }}
+            />
             <button
-              className="icon-btn send-btn"
+              className="send-btn"
               onClick={handleSendMessage}
               disabled={isLoading || !inputValue.trim()}
             >
-              <Send size={20} />
+              <ArrowUp size={18} />
             </button>
           </div>
-
-          <div className="footer-text">
-            Powered by <span>Himanshu2124/qwen-finance-7b</span> on Hugging Face
-          </div>
+          <p className="disclaimer">Finance AI can make mistakes. Verify important information.</p>
         </div>
       </main>
     </div>
   );
 }
 
-// ── Message bubble with collapsible sources ──────────────────────
+
+// ── Message bubble ───────────────────────────────────────────────
 function MessageBubble({ msg }) {
   const [showSources, setShowSources] = useState(false);
 
   if (msg.sender === 'system') {
-    return (
-      <div className={`system-message ${msg.isError ? 'error' : ''}`}>
-        {msg.text}
-      </div>
-    );
+    return <div className={`system-msg ${msg.isError ? 'error' : ''}`}>{msg.text}</div>;
   }
 
+  const isUser = msg.sender === 'user';
+
   return (
-    <div className={`chat-message ${msg.sender}`}>
-      {msg.sender === 'bot' && <Bot size={20} style={{ minWidth: 20 }} />}
-      <div style={{ flex: 1 }}>
-        <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{msg.text}</p>
+    <div className={`msg ${isUser ? 'msg-user' : 'msg-bot'}`}>
+      {!isUser && (
+        <div className="msg-avatar bot-avatar">
+          <Sparkles size={18} />
+        </div>
+      )}
+      <div className="msg-content">
+        {isUser ? (
+          <p>{msg.text}</p>
+        ) : (
+          <div className="markdown-body">
+            <ReactMarkdown>{msg.text}</ReactMarkdown>
+          </div>
+        )}
 
-        {/* ── Source citations (collapsible) ─────────────────── */}
         {msg.sources && msg.sources.length > 0 && (
-          <div className="sources-section">
-            <button
-              className="sources-toggle"
-              onClick={() => setShowSources(v => !v)}
-            >
-              <FileText size={13} />
+          <div className="sources">
+            <button className="sources-btn" onClick={() => setShowSources(v => !v)}>
+              <FileText size={12} />
               {showSources ? 'Hide' : 'Show'} {msg.sources.length} source{msg.sources.length > 1 ? 's' : ''}
-              {showSources ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              {showSources ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
             </button>
-
             {showSources && (
               <div className="sources-list">
                 {msg.sources.map((src, i) => (
-                  <div key={i} className="source-item">
-                    <span className="source-index">{i + 1}</span>
+                  <div key={i} className="source-chip">
+                    <span className="source-num">{i + 1}</span>
                     <p>{src}</p>
                   </div>
                 ))}
@@ -335,6 +410,11 @@ function MessageBubble({ msg }) {
           </div>
         )}
       </div>
+      {isUser && (
+        <div className="msg-avatar user-avatar">
+          <span>Y</span>
+        </div>
+      )}
     </div>
   );
 }

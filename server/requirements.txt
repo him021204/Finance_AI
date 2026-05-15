@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pdfplumber
+sentence-transformers
+faiss-cpu
+transformers
+accelerate
+bitsandbytes
+pyngrok
+torch
+numpy
+requests

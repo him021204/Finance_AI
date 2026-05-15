@@ -5,14 +5,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
+# Node
 node_modules
 dist
 dist-ssr
 *.local
 
-# Editor directories and files
+# Editor
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -26,9 +26,28 @@ dist-ssr
 # Environment
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
 
-# Server
+# Server uploads (temp)
 server/uploads/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Vector store (auto-generated, can be large)
+server/knowledge_base/_vector_store/
+server/knowledge_base/_extracted_*/
+
+# Knowledge base PDFs (optional — uncomment if you don't want to push reports)
+# server/knowledge_base/*.pdf
+# server/knowledge_base/*.zip
+
+# Model cache (downloaded automatically)
+*.pt
+*.bin
+*.safetensors
