@@ -1,0 +1,26 @@
+services:
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - hf_cache:/app/.hf_cache
+      - ./server/knowledge_base:/app/knowledge_base
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+volumes:
+  hf_cache:
